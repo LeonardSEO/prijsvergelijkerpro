@@ -159,34 +159,53 @@ def analyze_results(product: Product, prices: List[Tuple[str, Optional[float]]],
     competitor_prices = prices[1:]
 
     if own_price is None:
-        return f"Unable to fetch price for [{product.url}]({product.url})\nError: {own_error}"
+        return f"Unable to fetch price for [Your product]({product.url})\nError: {own_error}"
 
-    analysis = f"**Your product ([{product.url}]({product.url}))**\n\nYour price: €{own_price:.2f}\n\n"
+    analysis = f"**Your product: [Your product]({product.url})**\n\nYour price: €{own_price:.2f}\n\n"
     cheaper_count = 0
     equal_count = 0
 
     for i, (comp_url, comp_price) in enumerate(competitor_prices):
-        if comp_price is None:
-            comp_error = errors[i+1][1]
-            manual_price = st.number_input(f"Manual Price for Competitor {i+1}", min_value=0.0, format="%.2f", key=f"manual_price_{i}")
-            if manual_price > 0:
-                comp_price = manual_price
-                competitor_prices[i] = (comp_url, comp_price)
+        comp_error = errors[i + 1][1]
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            if comp_price is None:
+                comp_price = st.number_input(
+                    f"Manual Price for Competitor {i + 1}",
+                    min_value=0.0,
+                    format="%.2f",
+                    key=f"manual_price_{i}"
+                )
+                if comp_price > 0:
+                    competitor_prices[i] = (comp_url, comp_price)
+                else:
+                    st.markdown(
+                        f"<span style='color:black'>Competitor {i + 1}: Unable to fetch price<br>Error: {comp_error}</span>",
+                        unsafe_allow_html=True
+                    )
+                    continue
+            price_diff = own_price - comp_price
+            percentage_diff = (price_diff / comp_price) * 100
+            if price_diff > 0:
+                st.markdown(
+                    f"<span style='color:black'>Competitor {i + 1}: [€{comp_price:.2f}]({comp_url}) (You are {percentage_diff:.2f}% more expensive)</span>",
+                    unsafe_allow_html=True
+                )
+            elif price_diff < 0:
+                st.markdown(
+                    f"<span style='color:black'>Competitor {i + 1}: [€{comp_price:.2f}]({comp_url}) (You are {abs(percentage_diff):.2f}% cheaper)</span>",
+                    unsafe_allow_html=True
+                )
+                cheaper_count += 1
             else:
-                analysis += f"Competitor {i+1}: Unable to fetch price\nError: {comp_error}\n"
-                continue
-
-        price_diff = own_price - comp_price
-        percentage_diff = (price_diff / comp_price) * 100
-
-        if price_diff > 0:
-            analysis += f"Competitor {i+1}: [:red[€{comp_price:.2f}]({comp_url}) (You are {percentage_diff:.2f}% more expensive)]\n"
-        elif price_diff < 0:
-            analysis += f"Competitor {i+1}: [:green[€{comp_price:.2f}]({comp_url}) (You are {abs(percentage_diff):.2f}% cheaper)]\n"
-            cheaper_count += 1
-        else:
-            analysis += f"Competitor {i+1}: [:orange[€{comp_price:.2f}]({comp_url}) (Same price)]\n"
-            equal_count += 1
+                st.markdown(
+                    f"<span style='color:black'>Competitor {i + 1}: [€{comp_price:.2f}]({comp_url}) (Same price)</span>",
+                    unsafe_allow_html=True
+                )
+                equal_count += 1
+        with col2:
+            if st.button(f"Confirm Price for Competitor {i + 1}", key=f"confirm_price_{i}"):
+                competitor_prices[i] = (comp_url, comp_price)
 
     valid_competitor_count = sum(1 for _, price in competitor_prices if price is not None)
     if valid_competitor_count > 0:
