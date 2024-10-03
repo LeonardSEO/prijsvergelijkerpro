@@ -106,6 +106,9 @@ def parse_price(price_str):
 
 
 def fetch_price(url: str) -> Tuple[Optional[float], Optional[str]]:
+    if not url:
+        return None, None
+
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
     try:
         response = requests.get(url, headers=headers, timeout=10)
@@ -145,6 +148,11 @@ def compare_prices(product: Product, progress_bar):
 
     # Fetch competitor prices
     for i, comp_url in enumerate(product.competitors):
+        if not comp_url:
+            results.append((comp_url, None))
+            errors.append((comp_url, None))
+            continue
+
         comp_price, comp_error = fetch_price(comp_url)
         results.append((comp_url, comp_price))
         errors.append((comp_url, comp_error))
@@ -159,26 +167,30 @@ def analyze_results(product: Product, prices: List[Tuple[str, Optional[float]]],
     competitor_prices = prices[1:]
 
     if own_price is None:
-        return f"Unable to fetch price for [Your product]({product.url})\nError: {own_error}"
+        return f"Unable to fetch price for your product ([{product.url}]({product.url}))\nError: {own_error}"
 
-    analysis = f"**Your product: [Your product]({product.url})**\n\nYour price: €{own_price:.2f}\n\n"
+    analysis = f"**Your product:** [Product link]({product.url})\n\nYour price: €{own_price:.2f}\n\n"
     cheaper_count = 0
     equal_count = 0
 
     for i, (comp_url, comp_price) in enumerate(competitor_prices):
+        if not comp_url:
+            continue
+
         comp_error = errors[i + 1][1]
-        col1, col2 = st.columns([2, 1])
+        col1, col2 = st.columns([3, 1])
         with col1:
             if comp_price is None:
-                comp_price = st.number_input(
+                comp_price_input = st.text_input(
                     f"Manual Price for Competitor {i + 1}",
-                    min_value=0.0,
-                    format="%.2f",
+                    value="",
                     key=f"manual_price_{i}"
                 )
-                if comp_price > 0:
-                    competitor_prices[i] = (comp_url, comp_price)
-                else:
+                try:
+                    comp_price = float(comp_price_input.replace(',', '.'))
+                    if comp_price > 0:
+                        competitor_prices[i] = (comp_url, comp_price)
+                except ValueError:
                     st.markdown(
                         f"<span style='color:black'>Competitor {i + 1}: Unable to fetch price<br>Error: {comp_error}</span>",
                         unsafe_allow_html=True
@@ -204,8 +216,14 @@ def analyze_results(product: Product, prices: List[Tuple[str, Optional[float]]],
                 )
                 equal_count += 1
         with col2:
-            if st.button(f"Confirm Price for Competitor {i + 1}", key=f"confirm_price_{i}"):
-                competitor_prices[i] = (comp_url, comp_price)
+            if comp_price_input and comp_price is None:
+                if st.button(f"Confirm Price for Competitor {i + 1}", key=f"confirm_price_{i}"):
+                    try:
+                        comp_price = float(comp_price_input.replace(',', '.'))
+                        if comp_price > 0:
+                            competitor_prices[i] = (comp_url, comp_price)
+                    except ValueError:
+                        pass
 
     valid_competitor_count = sum(1 for _, price in competitor_prices if price is not None)
     if valid_competitor_count > 0:
